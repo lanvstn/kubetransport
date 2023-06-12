@@ -57,17 +57,24 @@ func Reconcile(s state.State) state.State {
 }
 
 func buildHosts(s state.State) []string {
-	return lo.Reduce(s.Forwards, func(agg []string, fwd state.Forward, _ int) []string {
-		return append(agg, fmt.Sprintf("%s %s",
+	return lo.FilterMap(s.Forwards, func(fwd state.Forward, _ int) (string, bool) {
+		if fwd.Status == state.StatusInvalid {
+			return "", false
+		}
+
+		return fmt.Sprintf("%s %s",
 			fwd.LocalIP,
-			strings.Join(namesForSvc(fwd.Service), " ")))
-	}, []string{})
+			strings.Join(namesForSvc(fwd.Service.KResource), " ")), true
+	})
 }
 
-// TODO this function is dumb and swap around IPs for no reason, at least sort the thing or something
+// TODO this function is dumb and swap around IPs for no reason, should not reassign.
 func assignIPs(s state.State) state.State {
 	curIP := net.IPv4(127, 0, 16, 1) // IPv6 would be nice but be careful implementing this (net.IP type has footguns here)
 	s.Forwards = lo.Map(s.Forwards, func(fwd state.Forward, _ int) state.Forward {
+		if fwd.Status == state.StatusInvalid {
+			return fwd
+		}
 		fwd.LocalIP = curIP
 		curIP = nextIP(curIP)
 		return fwd

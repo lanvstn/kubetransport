@@ -5,11 +5,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/lanvstn/kubetransport/internal"
 	"github.com/lanvstn/kubetransport/internal/hostsync"
+	"github.com/lanvstn/kubetransport/internal/k8pod"
 	"github.com/lanvstn/kubetransport/internal/k8svc"
+	"github.com/lanvstn/kubetransport/internal/pf"
 	"github.com/lanvstn/kubetransport/internal/state"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -32,13 +35,25 @@ func main() {
 		if s.Err != nil {
 			log.Printf("ERR: %v", s.Err)
 		}
+		sort.Sort(s.Forwards)
 
-		// s = k8pod.Reconcile(s)
+		s = k8pod.Reconcile(s)
+		if s.Err != nil {
+			log.Printf("ERR: %v", s.Err)
+		}
+		sort.Sort(s.Forwards)
 
 		s = hostsync.Reconcile(s)
 		if s.Err != nil {
 			log.Printf("ERR: %v", s.Err)
 		}
+		sort.Sort(s.Forwards)
+
+		s = pf.Reconcile(s)
+		if s.Err != nil {
+			log.Printf("ERR: %v", s.Err)
+		}
+		sort.Sort(s.Forwards)
 
 		_ = json.NewEncoder(os.Stdout).Encode(&s) //debug
 	}
@@ -71,7 +86,7 @@ func Init(event chan<- struct{}) state.State {
 		return s.WithErr(err)
 	}
 
-	factory := informers.NewSharedInformerFactory(clientset, 1*time.Minute)
+	factory := informers.NewSharedInformerFactory(clientset, 10*time.Second) // TODO raise
 
 	svci := factory.Core().V1().Services()
 	podi := factory.Core().V1().Pods()
@@ -91,6 +106,8 @@ func Init(event chan<- struct{}) state.State {
 	}
 
 	s = k8svc.Init(s, svci.Lister())
+	s = k8pod.Init(s, podi.Lister())
+	s = pf.Init(s, config)
 
 	factory.Start(wait.NeverStop)
 

@@ -13,7 +13,6 @@ import (
 const controllerID internal.ControllerID = "k8svc"
 
 type internalState struct {
-	// clientset *kubernetes.Clientset
 	lister lcorev1.ServiceLister
 }
 
@@ -23,41 +22,12 @@ func getInternal(s state.State) *internalState {
 
 func Init(s state.State, lister lcorev1.ServiceLister) state.State {
 	s.Internal[controllerID] = &internalState{}
-
-	// kubeconfig := s.Config.KubeconfigPath
-	// if kubeconfig == "" {
-	// 	if home := homedir.HomeDir(); home != "" {
-	// 		filepath.Join(home, ".kube", "config")
-	// 	} else {
-	// 		panic("no home directory! kubeconfig path must be set by hand")
-	// 	}
-	// }
-
-	// // use the current context in kubeconfig
-	// config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	// if err != nil {
-	// 	return s.WithErr(err)
-	// }
-
-	// // create the clientset
-	// clientset, err := kubernetes.NewForConfig(config)
-	// if err != nil {
-	// 	return s.WithErr(err)
-	// }
-
-	// s.Internal[controllerID].(*internalState).clientset = clientset
-
 	s.Internal[controllerID].(*internalState).lister = lister
 
 	return s
 }
 
 func Reconcile(s state.State) state.State {
-	// svcl, err := getInternal(s).clientset.CoreV1().Services("").List(context.TODO(), v1.ListOptions{})
-	// if err != nil {
-	// 	return s.WithErr(err)
-	// }
-
 	svcl, err := getInternal(s).lister.List(labels.Everything())
 	if err != nil {
 		return s.WithErr(err)
@@ -72,10 +42,14 @@ func Reconcile(s state.State) state.State {
 		}
 
 		return state.Forward{
-			Service: state.KResource{
-				Name:      svc.Name,
-				Namespace: svc.Namespace,
+			Service: state.Service{
+				KResource: state.KResource{
+					Name:      svc.Name,
+					Namespace: svc.Namespace,
+				},
+				LabelSelector: svc.Spec.Selector,
 			},
+			Status: state.StatusWaitPod,
 		}
 	})
 

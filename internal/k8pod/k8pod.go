@@ -1,80 +1,63 @@
 package k8pod
 
-// import (
-// 	"context"
-// 	"path/filepath"
+import (
+	"github.com/lanvstn/kubetransport/internal"
+	"github.com/lanvstn/kubetransport/internal/state"
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	lcorev1 "k8s.io/client-go/listers/core/v1"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+)
 
-// 	"github.com/lanvstn/kubetransport/internal"
-// 	"github.com/lanvstn/kubetransport/internal/state"
-// 	"github.com/samber/lo"
-// 	corev1 "k8s.io/api/core/v1"
-// 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-// 	"k8s.io/client-go/kubernetes"
-// 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-// 	"k8s.io/client-go/tools/clientcmd"
-// 	"k8s.io/client-go/util/homedir"
-// )
+const controllerID internal.ControllerID = "k8pod"
 
-// const controllerID internal.ControllerID = "k8pod"
+type internalState struct {
+	lister lcorev1.PodLister
+}
 
-// type internalState struct {
-// 	clientset *kubernetes.Clientset
-// }
+func getInternal(s state.State) *internalState {
+	return s.Internal[controllerID].(*internalState)
+}
 
-// func getInternal(s state.State) *internalState {
-// 	return s.Internal[controllerID].(*internalState)
-// }
+func Init(s state.State, lister lcorev1.PodLister) state.State {
+	s.Internal[controllerID] = &internalState{}
+	s.Internal[controllerID].(*internalState).lister = lister
 
-// func Init(s state.State) state.State {
-// 	s.Internal[controllerID] = &internalState{}
+	return s
+}
 
-// 	kubeconfig := s.Config.KubeconfigPath
-// 	if kubeconfig == "" {
-// 		if home := homedir.HomeDir(); home != "" {
-// 			filepath.Join(home, ".kube", "config")
-// 		} else {
-// 			panic("no home directory! kubeconfig path must be set by hand")
-// 		}
-// 	}
+func Reconcile(s state.State) state.State {
+	podl, err := getInternal(s).lister.List(labels.Everything())
+	if err != nil {
+		return s.WithErr(err)
+	}
 
-// 	// use the current context in kubeconfig
-// 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-// 	if err != nil {
-// 		return s.WithErr(err)
-// 	}
+	s.Forwards = lo.Map(s.Forwards, func(fwd state.Forward, _ int) state.Forward {
+		if fwd.Service.LabelSelector == nil {
+			// Managed service like default/kubernetes
+			fwd.Status = state.StatusInvalid
+			return fwd
+		}
 
-// 	// create the clientset
-// 	clientset, err := kubernetes.NewForConfig(config)
-// 	if err != nil {
-// 		return s.WithErr(err)
-// 	}
+		pod, hasPod := lo.Find(podl, func(pod *corev1.Pod) bool {
+			return lo.Every(lo.Entries(pod.Labels), lo.Entries(fwd.Service.LabelSelector)) &&
+				pod.Namespace == fwd.Service.Namespace
+		})
 
-// 	s.Internal[controllerID].(*internalState).clientset = clientset
+		if !hasPod {
+			fwd.Status = state.StatusWaitPod
+			fwd.Pod = state.KResource{}
+			return fwd
+		}
 
-// 	return s
-// }
+		fwd.Pod = state.KResource{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		}
+		fwd.Status = state.StatusSetup
+		return fwd
+	})
 
-// func Reconcile(s state.State) state.State {
-// 	svcl, err := getInternal(s).clientset.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
-// 	if err != nil {
-// 		return s.WithErr(err)
-// 	}
-
-// 	// Rebuild forwards using service list, keeping existing entries
-// 	s.Forwards = lo.Map(svcl.Items, func(svc corev1.Service, _ int) state.Forward {
-// 		if fwd, ok := lo.Find(s.Forwards, func(fwd state.Forward) bool {
-// 			return fwd.Service.Name == svc.Name && fwd.Service.Namespace == svc.Namespace
-// 		}); ok {
-// 			return fwd
-// 		}
-
-// 		return state.Forward{
-// 			Service: state.KResource{
-// 				Name:      svc.Name,
-// 				Namespace: svc.Namespace,
-// 			},
-// 		}
-// 	})
-
-// 	return s
-// }
+	return s
+}

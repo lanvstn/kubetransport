@@ -48,7 +48,8 @@ func buryDead(s state.State) state.State {
 		select {
 		case dead := <-getInternal(s).dead:
 			_, i, ok := lo.FindIndexOf(s.Forwards, func(fwd state.Forward) bool {
-				return fwd.Pod == dead
+				fmt.Printf("F=%v D=%v\n\n", fwd.Pod, dead)
+				return fwd.Pod == &dead
 			})
 			if !ok {
 				panic(fmt.Errorf("non-existing port forward for %q found dead", dead)) // TODO: we may land in this in some cases
@@ -106,7 +107,11 @@ func createForwarders(s state.State) state.State {
 			return fwd
 		}
 
-		err := do(fwd.Pod, fwd.LocalIP)
+		if fwd.Pod == nil {
+			return fwd
+		}
+
+		err := do(*fwd.Pod, fwd.LocalIP)
 		if err != nil {
 			fwd.Err = err
 			return fwd

@@ -47,11 +47,11 @@ func Reconcile(s state.State) state.State {
 
 		if !hasPod {
 			fwd.Status = state.StatusWaitPod
-			fwd.Pod = state.KResource{}
+			fwd.Pod = &state.KResource{}
 			return fwd
 		}
 
-		fwd.Pod = state.KResource{
+		fwd.Pod = &state.KResource{
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
 		}

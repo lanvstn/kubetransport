@@ -33,7 +33,7 @@ var _ = Describe("hostsync", func() {
 			},
 			{
 				Status: state.StatusSetup,
-				Pod: state.KResource{
+				Pod: &state.KResource{
 					Name:      "foo123",
 					Namespace: "default",
 				},
@@ -46,7 +46,7 @@ var _ = Describe("hostsync", func() {
 			},
 			{
 				Status: state.StatusSetup,
-				Pod: state.KResource{
+				Pod: &state.KResource{
 					Name:      "bar123",
 					Namespace: "default",
 				},
@@ -59,7 +59,7 @@ var _ = Describe("hostsync", func() {
 			},
 			{
 				Status: state.StatusSetup,
-				Pod: state.KResource{
+				Pod: &state.KResource{
 					Name:      "baz-0",
 					Namespace: "bang",
 				},

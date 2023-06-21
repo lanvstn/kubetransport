@@ -28,7 +28,7 @@ type State struct {
 }
 
 type Forward struct {
-	Pod     KResource
+	Pod     *KResource
 	Service Service
 	LocalIP net.IP
 
@@ -64,7 +64,7 @@ func (f Forwards) Less(i, j int) bool { return f[i].String() < f[j].String() }
 
 func (f Forward) String() string {
 	return fmt.Sprintf("svc:%s pod:%s localip:%s status:%s",
-		f.Service.String(), f.Pod.String(), f.LocalIP.String(), f.Status)
+		f.Service.String(), f.Pod, f.LocalIP.String(), f.Status)
 }
 
 func (k KResource) String() string {

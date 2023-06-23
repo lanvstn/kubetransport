@@ -2,7 +2,6 @@ package internal2
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/netip"
 	"os"
 	"sort"
@@ -39,6 +38,12 @@ type pod struct {
 	Ports     []podPort
 }
 
+type pods []pod
+
+func (f pods) Len() int           { return len(f) }
+func (f pods) Swap(i, j int)      { f[i], f[j] = f[j], f[i] }
+func (f pods) Less(i, j int) bool { return f[i].Namespace+f[i].Name < f[j].Namespace+f[j].Name }
+
 type podPort struct {
 	Port int32
 	Name string
@@ -49,6 +54,8 @@ type ips []netip.Addr
 func (f ips) Len() int           { return len(f) }
 func (f ips) Swap(i, j int)      { f[i], f[j] = f[j], f[i] }
 func (f ips) Less(i, j int) bool { return f[i].Less(f[j]) }
+
+var allocBucket = []byte("ip-alloc")
 
 func Run(slister lcorev1.ServiceLister, plister lcorev1.PodLister, db *bbolt.DB) error {
 	svcs, err := services(slister)
@@ -72,8 +79,6 @@ func Run(slister lcorev1.ServiceLister, plister lcorev1.PodLister, db *bbolt.DB)
 }
 
 func allocateServices(svcs []associatedService, db *bbolt.DB, cidr netip.Prefix) error {
-	var allocBucket = []byte("ip-alloc")
-
 	return db.Update(func(tx *bbolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(allocBucket)
 		if err != nil {
@@ -126,7 +131,6 @@ func allocateServices(svcs []associatedService, db *bbolt.DB, cidr netip.Prefix)
 			}
 
 			// Cur is yet unallocated
-			fmt.Println(cur)
 			err := b.Put(lo.Must(json.Marshal(cur)), lo.Must(json.Marshal(usvc.Service)))
 			if err != nil {
 				return errors.New(err)
@@ -155,6 +159,7 @@ func associateServicesPods(lister lcorev1.PodLister, svcs []service) ([]associat
 				// Match pods to service
 				return lo.Every(lo.Entries(thisPod.Labels), lo.Entries(svc.LabelSelector)) &&
 					thisPod.Namespace == svc.Namespace
+				// TODO: only match 100% Ready pods.
 			}), func(thisPod *corev1.Pod, _ int) pod {
 				// Transform
 				return pod{

@@ -1,0 +1,4 @@
+/.vscode
+/kubetransport
+/myhosts
+*.db
